@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Word Blaster — Austin v6</title>
+<style>
+:root{
+  --bg1:#07102a; --bg2:#0b1530; --accent:#ff6b6b; --gold:#ffd76a; --panel:rgba(255,255,255,0.07);
+  --good:#6ef2b0; --bad:#ff8a8a; --ui:#eaf6ff;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:var(--ui);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:10px auto;padding:10px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:4px 0;color:var(--gold);font-weight:900}
+.small{font-size:13px;opacity:.9}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{background:var(--accent);border:none;color:#220e0e;padding:10px 12px;border-radius:12px;font-weight:900;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.45)}
+button.ghost{background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--ui);padding:8px 10px}
+button[tabindex="-1"]{outline:none}
+button:focus{outline:none}
+.range{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:12px;background:var(--panel)}
+.range input{accent-color:#65d3ff}
+
+/* game area */
+.game{position:relative;height:76vh;border-radius:14px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.6);background:linear-gradient(180deg,#04132b,#051227)}
+canvas#bg{position:absolute;inset:0;z-index:0}
+#sky{position:absolute;inset:0;z-index:1;touch-action:none;user-select:none}
+
+/* rocket */
+#rocket{position:absolute;left:50%;transform:translateX(-50%);bottom:12%;width:96px;height:auto;z-index:6;filter:drop-shadow(0 8px 22px rgba(0,0,0,.6))}
+
+/* HUD */
+.hud{position:absolute;left:12px;top:12px;background:var(--panel);padding:10px;border-radius:12px;backdrop-filter:blur(4px);font:600 16px/1 Inter,system-ui,Arial;z-index:12}
+.hud.right{left:auto;right:12px}
+.hud .row{display:flex;gap:12px}
+.wordBox{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;background:linear-gradient(90deg,#072a3b,#06304a);padding:14px 16px;border-radius:14px;z-index:12;display:flex;align-items:center;gap:14px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.target{font-size:32px;font-weight:900;color:var(--gold);letter-spacing:2px;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.slots{display:flex;gap:8px}
+.slot{min-width:56px;height:64px;border-radius:10px;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#eaf6ff;padding:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.flash{animation:flash 0.6s ease 2}
+@keyframes flash{0%,100%{filter:drop-shadow(0 0 0 rgba(255,215,106,0))}50%{filter:drop-shadow(0 0 10px rgba(255,215,106,.9))}}
+
+/* entities */
+.enemy{position:absolute;width:64px;height:64px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:900;z-index:6;user-select:none;pointer-events:none}
+.enemy.good{background:linear-gradient(180deg,#caffeb,#6ef2b0);color:#063426;border:2px solid #39d79b;box-shadow:0 12px 30px rgba(54,245,164,.12)}
+.enemy.bad{background:linear-gradient(180deg,#ffd7d7,#ff8a8a);color:#3b0d0d;border:2px solid #e16161;box-shadow:0 12px 30px rgba(255,120,120,.12)}
+
+.bullet{position:absolute;width:8px;height:18px;background:linear-gradient(180deg,#fff,#d8f3ff);border-radius:6px;z-index:8;box-shadow:0 6px 18px rgba(110,240,176,.12)}
+
+/* Power-ups: distinct shapes/colors */
+.gem{position:absolute;width:56px;height:56px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:900;z-index:7;pointer-events:none;box-shadow:0 12px 30px rgba(0,0,0,.45); color:#0c1930}
+.gem[data-kind="shield"]{background:radial-gradient(circle at 30% 30%,#b8fffb,#46e0ff); border:2px solid #7ee3ff}
+.gem[data-kind="slow"]{background:radial-gradient(circle at 30% 30%,#fff0b8,#ffd36e); border:2px solid #ffe388}
+.gem[data-kind="magnet"]{background:radial-gradient(circle at 30% 30%,#e5c6ff,#b07cff); border:2px solid #c9a2ff}
+.gem[data-kind="firerate"]{background:radial-gradient(circle at 30% 30%,#ffc2cb,#ff7a8a); border:2px solid #ff9bab}
+.gem[data-kind="spread"]{background:radial-gradient(circle at 30% 30%,#c7ffb8,#6ef2b0); border:2px solid #95f7ce}
+
+/* popup (non-blocking) */
+.popup{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);z-index:20;background:rgba(2,6,14,.9);padding:14px 16px;border-radius:14px;display:none;text-align:center;color:#eaf6ff;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.popup.show{display:block;animation:pop .9s ease}
+@keyframes pop{0%{transform:translate(-50%,-60%) scale(.86);opacity:0}30%{transform:translate(-50%,-50%) scale(1.02);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+
+.controlsRow{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.touchBtn{background:transparent;border:1px solid rgba(255,255,255,.1);color:#eaf6ff;padding:8px 12px;border-radius:10px}
+
+@media (max-width:720px){ #rocket{width:74px} .slot{min-width:40px;height:46px;font-size:18px} .target{font-size:24px} }
+
+/* welcome + settings */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:50}
+.card{background:linear-gradient(180deg,#0a1b3b,#101935);padding:20px;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.6);max-width:520px;width:92%;text-align:center}
+.card h2{margin:0 0 6px 0;color:var(--gold)}
+.label{font-size:13px;opacity:.95;margin:4px 0 6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.slider{display:flex;align-items:center;gap:8px;background:var(--panel);padding:6px 10px;border-radius:12px}
+.slider input{width:100%;accent-color:#65d3ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Word Blaster — Austin</h1>
+      <div class="small">Arrow keys / A D to move • Space to fire • Touch supported</div>
+    </div>
+    <div class="controls">
+      <button id="startBtn" tabindex="-1">Start</button>
+      <button id="pauseBtn" class="ghost" tabindex="-1">Pause</button>
+      <button id="muteBtn" class="ghost" tabindex="-1">Mute</button>
+      <button id="hintBtn" class="ghost" tabindex="-1">Hint</button>
+      <div class="range">
+        <label for="speed">Falling Speed</label>
+        <input id="speed" type="range" min="0.6" max="2.0" step="0.1" value="1.0" />
+      </div>
+    </div>
+  </header>
+
+  <div class="game" id="game">
+    <canvas id="bg"></canvas>
+    <div id="sky" aria-live="polite"></div>
+
+    <!-- Rocket SVG -->
+    <img id="rocket" alt="rocket" src="data:image/svg+xml;utf8,
+    %3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 96'%3E%3Cdefs%3E%3ClinearGradient id='rg' x1='0' x2='0' y1='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff6b6b'/%3E%3Cstop offset='100%25' stop-color='%23ff3030'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg%3E%3Cpath fill='url(%23rg)' d='M36 2c-8 5-19 20-22 31 0 0 10 10 12 17 2 7 8 12 12 13s12 2 15 0c3-2 12-9 14-14 3-5 9-17 9-17C71 21 62 7 52 2 48 1 42 0 36 2z'/%3E%3Cellipse cx='36' cy='36' rx='9' ry='11' fill='%23a7e3ff'/%3E%3Cpath fill='%230b6b98' d='M10 78c8-4 20-8 26-8s18 4 26 8c-8 11-18 14-26 14S18 89 10 78z'/%3E%3Cpath fill='%23ffa733' d='M30 86c-2 6-4 10-7 10s-5-3-5-6 5-8 12-4z'/%3E%3C/g%3E%3C/svg%3E"/>
+
+    <div class="hud">Score: <span id="score">0</span><br/><span class="small">Lives: <span id="lives">3</span> • High: <span id="high">0</span></span></div>
+    <div class="hud right">Level: <span id="level">1</span><br/><span class="small" id="words">Words: 0/30</span></div>
+
+    <div class="wordBox" role="status" id="wordBox">
+      <div style="font-size:13px;color:#cfe8ff">Target</div>
+      <div class="target" id="target">--</div>
+      <div class="slots" id="slots"></div>
+    </div>
+
+    <div id="popup" class="popup"><div id="popTitle" style="font-weight:900;color:var(--gold)"></div><div id="popSub" style="opacity:.95;margin-top:6px"></div></div>
+  </div>
+
+  <div class="controlsRow">
+    <button id="left" class="touchBtn" tabindex="-1">◀</button>
+    <button id="right" class="touchBtn" tabindex="-1">▶</button>
+    <button id="fire" class="touchBtn" tabindex="-1">FIRE</button>
+  </div>
+</div>
+
+<!-- Welcome screen -->
+<div class="overlay" id="welcome">
+  <div class="card">
+    <h2>Hi Austin! 🎉</h2>
+    <div class="label">Are you ready to rock n’ roll?</div>
+    <div style="margin:8px 0 14px">Last High Score: <b id="wHigh">0</b></div>
+    <button id="playNow">Play!</button>
+    <button id="parentBtn" class="ghost" style="margin-left:8px">Parent Settings</button>
+  </div>
+</div>
+
+<!-- Parent settings -->
+<div class="overlay" id="settings" style="display:none">
+  <div class="card">
+    <h2>Parent Settings</h2>
+    <div class="grid" style="margin:10px 0">
+      <div class="slider"><label style="width:140px">Music Volume</label><input id="musicVol" type="range" min="0" max="1" step="0.01" value="0.7"></div>
+      <div class="slider"><label style="width:140px">SFX Volume</label><input id="sfxVol" type="range" min="0" max="1" step="0.01" value="0.45"></div>
+      <div class="slider"><label style="width:140px">Movement Speed</label><input id="moveSpd" type="range" min="0.4" max="1.6" step="0.05" value="0.9"></div>
+      <div class="slider"><label style="width:140px">Falling Speed</label><input id="fallSpd" type="range" min="0.6" max="2" step="0.1" value="0.95"></div>
+      <div class="slider"><label style="width:140px">Power-up Rate</label><input id="powerRate" type="range" min="0.05" max="0.5" step="0.01" value="0.16"></div>
+      <div class="slider"><label style="width:140px">Voice On/Off</label><input id="voiceOn" type="checkbox" checked></div>
+    </div>
+    <div style="margin-top:12px">
+      <button id="closeSettings">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Word lists ---------- */
+const LEVEL_WORDS = {
+  1: ["a","i","it","is","in","am","me","my","up","we","go","no","so","to","do","be","he","she","at","an","as","by","on","or","and","can","see","you","the","here"],
+  2: ["like","look","big","not","one","two","red","blue","green","yellow","come","down","away","help","jump","make","play","run","said","where","little","find","funny","again","will","yes","stop","more","day","night"],
+  3: ["about","after","again","all","any","ask","ate","because","been","before","best","both","call","cold","could","every","fast","first","five","found","gave","goes","its","made","many","open","own","read","three","four"]
+};
+const WORDS_PER_LEVEL = 30;
+
+/* ---------- State ---------- */
+let level=1, wordsFound=0, currentWord='', collected='';
+let score=0, highScore=0, lives=3;
+let running=false, lastTime=0, spawnTimer=0, rocketX=0.5;
+let objs=[], bullets=[];
+let fireInterval=null, spread=1, fireDelay=140, slowFactor=1, shield=false;
+let speedScale = 1.0; // falling speed multiplier
+let moveMultiplier = 1.0; // movement
+let powerRate = 0.16; // chance to spawn power instead of letter
+let voiceEnabled = true;
+
+/* ---------- DOM ---------- */
+const game = document.getElementById('game');
+const sky = document.getElementById('sky');
+const bg = document.getElementById('bg');
+const ctx = bg.getContext('2d');
+const rocket = document.getElementById('rocket');
+const scoreEl = document.getElementById('score'), livesEl = document.getElementById('lives'), highEl = document.getElementById('high');
+const levelEl = document.getElementById('level'), wordsEl = document.getElementById('words');
+const slotsEl = document.getElementById('slots'), targetEl = document.getElementById('target'), wordBoxEl = document.getElementById('wordBox');
+const popup = document.getElementById('popup'), popTitle = document.getElementById('popTitle'), popSub = document.getElementById('popSub');
+const startBtn = document.getElementById('startBtn'), pauseBtn = document.getElementById('pauseBtn'), muteBtn = document.getElementById('muteBtn'), hintBtn = document.getElementById('hintBtn');
+const leftBtn = document.getElementById('left'), rightBtn = document.getElementById('right'), fireBtn = document.getElementById('fire');
+const speedSlider = document.getElementById('speed');
+
+/* ---------- Welcome & Settings ---------- */
+const welcome = document.getElementById('welcome');
+const wHigh = document.getElementById('wHigh');
+const playNow = document.getElementById('playNow');
+const parentBtn = document.getElementById('parentBtn');
+const settings = document.getElementById('settings');
+const closeSettings = document.getElementById('closeSettings');
+const musicVol = document.getElementById('musicVol');
+const sfxVol = document.getElementById('sfxVol');
+const moveSpd = document.getElementById('moveSpd');
+const fallSpd = document.getElementById('fallSpd');
+const powerRateEl = document.getElementById('powerRate');
+const voiceOn = document.getElementById('voiceOn');
+
+/* ---------- Audio (WebAudio + Speech) ---------- */
+let audioCtx = null, musicGain = null, sfxGain = null;
+function ensureAudio(){ if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); musicGain = audioCtx.createGain(); sfxGain = audioCtx.createGain(); musicGain.gain.value = parseFloat(localStorage.getItem('wb_musicVol')||'0.7'); sfxGain.gain.value = parseFloat(localStorage.getItem('wb_sfxVol')||'0.45'); musicGain.connect(audioCtx.destination); sfxGain.connect(audioCtx.destination); } }
+function tone(freq=1000, time=0.08, type='square', vol=0.5, dest='sfx'){ try{ ensureAudio(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type = type; o.frequency.value = freq; o.connect(g); g.connect(dest==='music'?musicGain:sfxGain); g.gain.value = vol; o.start(); g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + time); o.stop(audioCtx.currentTime + time + 0.02);}catch(e){} }
+
+// Friendly female voice selection
+let voice = null;
+function pickFemaleVoice(){
+  try{
+    const voices = window.speechSynthesis.getVoices();
+    if(!voices || voices.length===0) return null;
+    const prefs = ["Google US English", "Samantha", "Victoria", "Karen", "Serena", "Tessa", "Amelie", "Nora", "Zira"];
+    for(const p of prefs){
+      const v = voices.find(v => v.name.includes(p));
+      if(v) return v;
+    }
+    const en = voices.find(v => v.lang.toLowerCase().startsWith('en'));
+    return en || voices[0];
+  }catch(e){ return null; }
+}
+window.speechSynthesis && (window.speechSynthesis.onvoiceschanged = ()=> { voice = pickFemaleVoice(); });
+
+function speak(text, rate=0.95, pitch=1.2){
+  try{
+    if(!window.speechSynthesis || !voiceEnabled) return;
+    const u = new SpeechSynthesisUtterance(text);
+    if(!voice) voice = pickFemaleVoice();
+    if(voice) u.voice = voice;
+    u.rate = rate; u.pitch = pitch; u.volume = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+function sayLetter(ch){ speak(ch.toUpperCase(), 1.0, 1.4); }
+function sayWord(word){ speak(`Great job! You spelled ${word}!`, 0.95, 1.2); }
+
+// Tetris-like loop (louder by default)
+let musicTimer = null, musicOn = true;
+const TETRIS_SEQ = [659,494,523,587,523,494,440,440,494,523,587,523,494,392,392];
+function startMusic(){ if(!musicOn || musicTimer) return; ensureAudio(); let i=0; const tick=()=>{ if(!musicOn) return; tone(TETRIS_SEQ[i%TETRIS_SEQ.length],0.22,'triangle',0.45,'music'); i++; musicTimer = setTimeout(tick, 215); }; tick(); }
+function stopMusic(){ if(musicTimer){ clearTimeout(musicTimer); musicTimer=null; } }
+
+/* ---------- Persistence ---------- */
+const STORAGE_KEY = 'wordblaster_v6';
+function saveState(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify({level,wordsFound,score,lives,spread,fireDelay,highScore})); }catch(e){} }
+function loadState(){ try{ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ const d = JSON.parse(raw); level = d.level || 1; wordsFound = d.wordsFound || 0; score = d.score || 0; lives = d.lives || 3; spread = d.spread || 1; fireDelay = d.fireDelay || 140; highScore = d.highScore || 0; } }catch(e){} updateHUD(); }
+
+/* ---------- Helpers ---------- */
+function pickWord(){ const list = LEVEL_WORDS[level] || LEVEL_WORDS[1]; return list[wordsFound % list.length]; }
+function setNewWord(){ collected=''; currentWord = pickWord(); targetEl.textContent = currentWord.toUpperCase(); highlightTarget(); renderSlots(); if(voiceEnabled) speak("Find the letters for " + currentWord); spawnTimer = 0; }
+function renderSlots(){ slotsEl.innerHTML = ''; for(let i=0;i<currentWord.length;i++){ const s = document.createElement('div'); s.className='slot'; s.textContent = i < collected.length ? currentWord[i].toUpperCase() : ''; slotsEl.appendChild(s); } }
+function updateHUD(){ scoreEl.textContent = score; livesEl.textContent = lives; levelEl.textContent = level; wordsEl.textContent = `Words: ${wordsFound}/${WORDS_PER_LEVEL}`; highEl.textContent = highScore; }
+function highlightTarget(){ wordBoxEl.classList.remove('flash'); void wordBoxEl.offsetWidth; wordBoxEl.classList.add('flash'); }
+
+/* ---------- Background ---------- */
+function resize(){ const r = game.getBoundingClientRect(); bg.width = r.width; bg.height = r.height; sky.style.width = r.width + 'px'; sky.style.height = r.height + 'px'; }
+window.addEventListener('resize', resize); resize();
+const starLayers = [
+  new Array(110).fill(0).map(()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.3+0.3,spd:0.018})),
+  new Array(160).fill(0).map(()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.9+0.4,spd:0.05})),
+];
+const planets = [{x:0.16,y:0.22,r:90,c1:'#7ab7ff',c2:'#2b4a88',a:0.24},{x:0.86,y:0.18,r:70,c1:'#ffd36e',c2:'#b98119',a:0.24}];
+function drawBG(){ const w=bg.width,h=bg.height; const g = ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#03142b'); g.addColorStop(1,'#061129'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  for(const layer of starLayers){ for(const s of layer){ s.y += s.spd/80; if(s.y>1) s.y=0; ctx.fillStyle = 'rgba(255,255,255,' + (0.65 + Math.random()*0.25) + ')'; ctx.fillRect(s.x*w, s.y*h, s.s, s.s); } }
+  for(const p of planets){ const x = p.x*w, y = p.y*h, r = p.r; const rad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r); rad.addColorStop(0, p.c1); rad.addColorStop(1, p.c2); ctx.globalAlpha = p.a; ctx.fillStyle = rad; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }
+  requestAnimationFrame(drawBG);
+}
+drawBG();
+
+/* ---------- Spawning ---------- */
+function spawnEntity(){
+  if(!currentWord || !running) return;
+  if(Math.random() < powerRate){ spawnPower(); return; }
+  const good = Math.random() < 0.6;
+  const next = currentWord[collected.length];
+  const ch = good ? next : randomWrong(next);
+  const el = document.createElement('div'); el.className = 'enemy ' + (good ? 'good' : 'bad'); el.textContent = ch.toUpperCase();
+  const x = Math.random() * (sky.clientWidth - 80); const y = -80;
+  el.style.left = x + 'px'; el.style.top = y + 'px'; sky.appendChild(el);
+  const baseV = (34 + level*5) * speedScale;
+  objs.push({type:'letter', ch, good, el, x, y, vy:(good?baseV:baseV*1.05) / slowFactor, vx:(Math.random()*40-20)});
+}
+function spawnPower(){
+  const kinds = ['shield','slow','magnet','firerate','spread'];
+  const kind = kinds[Math.floor(Math.random() * kinds.length)];
+  const el = document.createElement('div'); el.className = 'gem'; el.dataset.kind = kind; el.textContent = kind === 'shield' ? '🛡' : kind === 'slow' ? '⏳' : kind === 'magnet' ? '🧲' : kind === 'firerate' ? '⚡' : '✨';
+  const x = Math.random() * (sky.clientWidth - 60), y = -72;
+  el.style.left = x + 'px'; el.style.top = y + 'px'; sky.appendChild(el);
+  const baseV = (28 + level*4) * speedScale;
+  objs.push({type:'gem', kind, el, x, y, vy: baseV / slowFactor});
+}
+function randomWrong(target){ const letters = 'abcdefghijklmnopqrstuvwxyz'; let c = target; while(c === target) c = letters[Math.floor(Math.random()*letters.length)]; return c; }
+
+/* ---------- Bullets ---------- */
+function createBullet(atx, aty, vx=0){
+  const el = document.createElement('div'); el.className='bullet'; el.style.left = atx + 'px'; el.style.top = aty + 'px'; sky.appendChild(el);
+  bullets.push({x: atx, y: aty, vx, vy:-860, el});
+}
+function fireOnce(){
+  const r = rocket.getBoundingClientRect(); const s = sky.getBoundingClientRect();
+  const cx = r.left - s.left + r.width/2 - 4, cy = r.top - s.top + 4;
+  const angles = spread === 1 ? [0] : spread === 3 ? [-0.14,0,0.14] : [-0.22,-0.07,0.07,0.22];
+  for(const a of angles){ createBullet(cx, cy, a*420); }
+  tone(1500, 0.04, 'square', 0.8, 'sfx');
+}
+function startFiring(){ if(fireInterval) return; fireOnce(); fireInterval = setInterval(fireOnce, fireDelay); }
+function stopFiring(){ if(!fireInterval) return; clearInterval(fireInterval); fireInterval = null; }
+
+/* ---------- Collision ---------- */
+function rect(el){ const r = el.getBoundingClientRect(), s = sky.getBoundingClientRect(); return {left: r.left - s.left, right: r.right - s.left, top: r.top - s.top, bottom: r.bottom - s.top}; }
+function overlap(a,b){ return !(b.left > a.right || b.right < a.left || b.top > a.bottom || b.bottom < a.top); }
+
+function updatePhysics(dt){
+  const removed = [];
+  for(const o of objs){
+    o.y += o.vy * (dt/1000);
+    if(o.vx) o.x += o.vx * (dt/1000);
+    if(o.el){ o.el.style.left = o.x + 'px'; o.el.style.top = o.y + 'px'; }
+    // rocket collision
+    if(o.el && overlap(rect(o.el), rect(rocket))){
+      if(o.type === 'gem'){ activatePower(o.kind); o.el.remove(); removed.push(o); continue; }
+      if(o.type === 'letter'){ handleLetter(o); o.el.remove(); removed.push(o); continue; }
+    }
+    // off screen
+    if(o.y > sky.clientHeight + 140 || o.x < -160 || o.x > sky.clientWidth + 160){ if(o.type === 'letter' && o.good && o.ch === currentWord[collected.length]) miss(); o.el.remove(); removed.push(o); }
+  }
+  objs = objs.filter(o => !removed.includes(o));
+
+  // bullets collision
+  const remB = [];
+  for(const b of bullets){
+    b.y += b.vy * (dt/1000); b.x += b.vx * (dt/1000);
+    if(b.el){ b.el.style.top = b.y + 'px'; b.el.style.left = b.x + 'px'; }
+    if(b.y < -80){ b.el.remove(); remB.push(b); continue; }
+    for(const o of objs){
+      if(o.el && overlap(rect(b.el), rect(o.el))){
+        if(o.type === 'gem'){ activatePower(o.kind); }
+        else if(o.type === 'letter'){
+          if(o.good && o.ch === currentWord[collected.length]){ score = Math.max(0, score-2); showPopup('Careful','That was needed'); tone(300,0.12,'sawtooth',0.6,'sfx'); }
+          else { score += 4; particleExplosion(o.x + 28, o.y + 28); tone(1100,0.06,'triangle',0.7,'sfx'); }
+        }
+        o.el.remove(); o._k = true; if(b.el) b.el.remove(); remB.push(b); break;
+      }
+    }
+  }
+  bullets = bullets.filter(b => !remB.includes(b));
+  objs = objs.filter(o => !o._k);
+}
+
+/* ---------- Letters ---------- */
+function handleLetter(o){
+  if(o.good && o.ch === currentWord[collected.length]){
+    collected += o.ch; celebrateSmall(o.ch); renderSlots();
+    if(collected.length >= currentWord.length) { wordComplete(); }
+  } else { miss(); }
+}
+function celebrateSmall(ch){
+  sayLetter(ch);
+  particleBurst(wordBoxEl.getBoundingClientRect(), '#ffd76a');
+  targetEl.classList.add('flash'); setTimeout(()=> targetEl.classList.remove('flash'), 400);
+}
+function wordComplete(){
+  score += 20; wordsFound++;
+  sayWord(currentWord);
+  showPopup('Great job, Austin!', 'You spelled ' + currentWord.toUpperCase());
+  if(wordsFound >= WORDS_PER_LEVEL){
+    level++; wordsFound = 0; showPopup('Level up!', 'Now Level ' + level);
+    if(level > 3){ showPopup('Amazing!', 'You finished all levels!'); level = 1; }
+  }
+  // No pause – keep running smoothly
+  setTimeout(()=>{ setNewWord(); updateHUD(); saveState(); }, 400);
+}
+function miss(){
+  if(shield){ shield = false; showPopup('Shield','Saves one mistake'); tone(900,0.08,'sine',0.5,'sfx'); return; }
+  lives--; crashEffect(); collected = ''; renderSlots(); updateHUD();
+  if(voiceEnabled) speak("Try again");
+  if(lives <= 0) gameOver();
+}
+
+/* ---------- Power-ups ---------- */
+function activatePower(kind){
+  tone(1000,0.08,'triangle',0.6,'sfx');
+  if(kind === 'shield'){ shield = true; showPopup('Shield','Saves one mistake'); if(voiceEnabled) speak('Shield ready'); }
+  else if(kind === 'slow'){ slowFactor = 1.7; showPopup('Slow-motion','Take your time'); if(voiceEnabled) speak('Slow motion'); setTimeout(()=> slowFactor = 1, 6000); }
+  else if(kind === 'magnet'){ showPopup('Magnet','Letters drift to you'); if(voiceEnabled) speak('Magnet on'); let t = setInterval(()=> { for(const o of objs) if(o.type==='letter') { const rx = rocket.getBoundingClientRect().left; const ox = o.el.getBoundingClientRect().left; o.x += (rx - ox) * 0.06; } }, 60); setTimeout(()=> clearInterval(t), 6000); }
+  else if(kind === 'firerate'){ fireDelay = Math.max(60, fireDelay - 25); showPopup('Fire rate','Faster shots'); if(voiceEnabled) speak('Faster fire'); if(fireInterval){ clearInterval(fireInterval); fireInterval = setInterval(fireOnce, fireDelay); } }
+  else if(kind === 'spread'){ spread = Math.min(4, spread + 1); showPopup('Spread shot','More bullets'); if(voiceEnabled) speak('Spread shot'); }
+  score += 8; updateHUD(); saveState();
+}
+
+/* ---------- Particles & crash ---------- */
+function particleExplosion(cx, cy){
+  for(let i=0;i<12;i++){
+    const p = document.createElement('div'); p.style.position='absolute'; p.style.width='6px'; p.style.height='6px'; p.style.background = i%2 ? '#fff' : '#ffd76a'; p.style.left = cx + 'px'; p.style.top = cy + 'px'; p.style.borderRadius = '50%'; p.style.zIndex = 9; sky.appendChild(p);
+    const angle = Math.random()*Math.PI*2; const speed = 160 + Math.random()*220;
+    let t = 0;
+    const id = setInterval(()=>{ t += 16; const dx = Math.cos(angle) * speed * (t/1000); const dy = Math.sin(angle) * speed * (t/1000); p.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; p.style.opacity = String(Math.max(0, 1 - t/600)); if(t > 600){ clearInterval(id); p.remove(); } }, 16);
+  }
+}
+function particleBurst(rect, color){
+  for(let i=0;i<10;i++){
+    const p = document.createElement('div'); p.style.position='absolute'; p.style.width='6px'; p.style.height='6px'; p.style.background = color; p.style.left = (rect.left - sky.getBoundingClientRect().left + rect.width/2) + 'px'; p.style.top = (rect.top - sky.getBoundingClientRect().top) + 'px'; p.style.borderRadius = '50%'; p.style.zIndex = 9; sky.appendChild(p);
+    const angle = Math.random()*Math.PI*2; const speed = 120 + Math.random()*180;
+    let t = 0;
+    const id = setInterval(()=>{ t += 16; const dx = Math.cos(angle) * speed * (t/1000); const dy = Math.sin(angle) * speed * (t/1000); p.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; p.style.opacity = String(Math.max(0, 1 - t/500)); if(t > 500){ clearInterval(id); p.remove(); } }, 16);
+  }
+}
+function crashEffect(){
+  rocket.style.transform = 'translateX(-50%) translateY(-10px)'; setTimeout(()=> rocket.style.transform = 'translateX(-50%) translateY(0)', 160);
+  tone(260,0.22,'sawtooth',0.7,'sfx');
+}
+
+/* ---------- Game Over ---------- */
+function gameOver(){
+  running = false; stopMusic(); highScore = Math.max(highScore, score);
+  try{ const raw = JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); raw.highScore = highScore; localStorage.setItem(STORAGE_KEY, JSON.stringify(raw)); }catch(e){}
+  showPopup('Game Over', 'Score: ' + score + ' • High: ' + highScore);
+  startBtn.style.display = 'inline-block';
+  // Bring back welcome with updated high
+  setTimeout(()=>{ document.getElementById('wHigh').textContent = String(highScore); welcome.style.display='flex'; }, 900);
+}
+
+/* ---------- Popup helper ---------- */
+let popupTimer = null;
+function showPopup(t, sub){
+  popTitle.textContent = t; popSub.textContent = sub || ''; popup.classList.add('show'); clearTimeout(popupTimer); popupTimer = setTimeout(()=> popup.classList.remove('show'), 1100);
+}
+
+/* ---------- Loop ---------- */
+let lastFrame = 0;
+function gameLoop(ts){
+  if(!running) return;
+  if(!lastFrame) lastFrame = ts;
+  const dt = Math.min(40, ts - lastFrame); lastFrame = ts;
+
+  spawnTimer -= dt;
+  if(spawnTimer <= 0){ const base = Math.max(380, 960 - (level-1)*120); spawnTimer = (base / slowFactor) / speedScale; spawnEntity(); }
+
+  updatePhysics(dt);
+
+  // movement (tunable)
+  const step = 0.022 * moveMultiplier;
+  if(keys['ArrowLeft'] || keys['a'] || keys['A']) rocketX = Math.max(0, rocketX - step);
+  if(keys['ArrowRight'] || keys['d'] || keys['D']) rocketX = Math.min(1, rocketX + step);
+
+  const targetPx = rocketX * (sky.clientWidth - rocket.clientWidth);
+  const cur = parseFloat(rocket.style.left || targetPx) || targetPx;
+  rocket.style.left = (cur + (targetPx - cur) * 0.2) + 'px';
+
+  requestAnimationFrame(gameLoop);
+}
+
+/* ---------- Controls ---------- */
+const keys = {};
+document.addEventListener('keydown', (e) => {
+  if([' ','ArrowLeft','ArrowRight','a','d','A','D'].includes(e.key)){ e.preventDefault(); e.stopPropagation(); }
+  if(document.activeElement && document.activeElement.tagName === 'BUTTON'){ document.activeElement.blur(); }
+  keys[e.key] = true;
+  if(e.key === ' ') startFiring();
+});
+document.addEventListener('keyup', (e) => { keys[e.key] = false; if(e.key === ' ') stopFiring(); });
+
+leftBtn.addEventListener('pointerdown', ()=> rocketX = Math.max(0, rocketX - 0.08));
+rightBtn.addEventListener('pointerdown', ()=> rocketX = Math.min(1, rocketX + 0.08));
+fireBtn.addEventListener('pointerdown', ()=> startFiring());
+fireBtn.addEventListener('pointerup', ()=> stopFiring());
+sky.addEventListener('pointerdown', (e) => { dragging = true; moveTo(e); startFiring(); });
+sky.addEventListener('pointerup', () => { dragging = false; stopFiring(); });
+let dragging = false;
+sky.addEventListener('pointermove', (e) => { if(dragging) moveTo(e); });
+function moveTo(e){ const r = sky.getBoundingClientRect(); rocketX = (e.clientX - r.left) / r.width; rocketX = Math.max(0, Math.min(1, rocketX)); }
+
+speedSlider.addEventListener('input', ()=> { speedScale = parseFloat(speedSlider.value); });
+
+/* ---------- Start/Pause/Hint ---------- */
+startBtn.addEventListener('click', ()=> { startGame(); });
+pauseBtn.addEventListener('click', ()=> { running = !running; if(running){ lastFrame = 0; requestAnimationFrame(gameLoop); startMusic(); } else stopMusic(); pauseBtn.textContent = running ? 'Pause' : 'Resume'; });
+muteBtn.addEventListener('click', ()=> { musicOn = !musicOn; if(musicOn){ startMusic(); muteBtn.textContent = 'Mute'; } else { stopMusic(); muteBtn.textContent = 'Unmute'; } });
+hintBtn.addEventListener('click', ()=> hint());
+
+function startGame(){
+  [startBtn,pauseBtn,muteBtn,hintBtn,leftBtn,rightBtn,fireBtn].forEach(b=>b.blur());
+  loadState(); running = true; lastFrame = 0; spawnTimer = 0; setNewWord(); updateHUD(); requestAnimationFrame(gameLoop); startMusic(); startBtn.style.display = 'none'; welcome.style.display='none';
+}
+
+/* ---------- Hint ---------- */
+function hint(){
+  const next = currentWord[collected.length];
+  if(!next) return;
+  if(voiceEnabled) speak('Find the letter ' + next.toUpperCase(), 1.0, 1.4);
+  targetEl.classList.add('flash'); setTimeout(()=> targetEl.classList.remove('flash'), 600);
+}
+
+/* ---------- Init, Welcome, Settings ---------- */
+function loadStateOnStart(){ try{ const raw = localStorage.getItem(STORAGE_KEY); if(raw){ const d = JSON.parse(raw); level = d.level||1; wordsFound = d.wordsFound||0; score = d.score||0; lives = d.lives||3; spread = d.spread||1; fireDelay = d.fireDelay||140; highScore = d.highScore||0; } }catch(e){} updateHUD(); }
+loadStateOnStart(); updateHUD();
+document.getElementById('wHigh').textContent = localStorage.getItem(STORAGE_KEY) ? (JSON.parse(localStorage.getItem(STORAGE_KEY)).highScore||0) : 0;
+playNow.addEventListener('click', ()=>{ welcome.style.display='none'; startGame(); });
+parentBtn.addEventListener('click', ()=>{ settings.style.display='flex'; });
+closeSettings.addEventListener('click', ()=>{
+  settings.style.display='none';
+  localStorage.setItem('wb_musicVol', musicVol.value);
+  localStorage.setItem('wb_sfxVol', sfxVol.value);
+  ensureAudio();
+  musicGain.gain.value = parseFloat(musicVol.value);
+  sfxGain.gain.value = parseFloat(sfxVol.value);
+  moveMultiplier = parseFloat(moveSpd.value);
+  speedScale = parseFloat(fallSpd.value);
+  powerRate = parseFloat(powerRateEl.value);
+  voiceEnabled = voiceOn.checked;
+});
+
+// seed sliders from storage
+(function seedSliders(){
+  const mv = localStorage.getItem('wb_musicVol'); if(mv){ musicVol.value = mv; }
+  const sv = localStorage.getItem('wb_sfxVol'); if(sv){ sfxVol.value = sv; }
+  moveSpd.value = localStorage.getItem('wb_moveMult') || "0.9";
+  fallSpd.value = localStorage.getItem('wb_fallSpd') || "0.95";
+  powerRateEl.value = localStorage.getItem('wb_powerRate') || "0.16";
+  voiceOn.checked = (localStorage.getItem('wb_voice') || "1") === "1";
+  moveMultiplier = parseFloat(moveSpd.value);
+  speedScale = parseFloat(fallSpd.value);
+  powerRate = parseFloat(powerRateEl.value);
+  voiceEnabled = voiceOn.checked;
+})();
+
+// live persistence for sliders
+musicVol.addEventListener('input', ()=>{ ensureAudio(); musicGain.gain.value = parseFloat(musicVol.value); localStorage.setItem('wb_musicVol', musicVol.value); });
+sfxVol.addEventListener('input', ()=>{ ensureAudio(); sfxGain.gain.value = parseFloat(sfxVol.value); localStorage.setItem('wb_sfxVol', sfxVol.value); });
+moveSpd.addEventListener('input', ()=>{ moveMultiplier = parseFloat(moveSpd.value); localStorage.setItem('wb_moveMult', moveSpd.value); });
+fallSpd.addEventListener('input', ()=>{ speedScale = parseFloat(fallSpd.value); localStorage.setItem('wb_fallSpd', fallSpd.value); });
+powerRateEl.addEventListener('input', ()=>{ powerRate = parseFloat(powerRateEl.value); localStorage.setItem('wb_powerRate', powerRateEl.value); });
+voiceOn.addEventListener('change', ()=>{ voiceEnabled = voiceOn.checked; localStorage.setItem('wb_voice', voiceEnabled ? "1" : "0"); });
+
+showPopup('Ready','Press Start or Play!');
+</script>
+</body>
+</html>
