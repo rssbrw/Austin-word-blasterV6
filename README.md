@@ -19,7 +19,7 @@ Power-ups help you win — and you can track your high score!
 Helps children learn sight words while practicing reaction time and hand-eye coordination.
 
 ## 🔗 Play Online
-[Click here to play]( https://rssbrw.github.io/Austin-word-blasterV6/)
+[Click here to play](https://rssbrw.github.io/index.html/)
 
 ## 👏 Credits
 - Music: Tetris-style loop
